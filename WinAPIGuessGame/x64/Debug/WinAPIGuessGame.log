@@ -1,5 +1,0 @@
-﻿  WinAPIGuessGame.c
-C:\Users\grigh\source\repos\WinAPIGuessGame\WinAPIGuessGame\WinAPIGuessGame.c(62,11): warning C4244: функция: преобразование "time_t" в "unsigned int", возможна потеря данных
-C:\Users\grigh\source\repos\WinAPIGuessGame\WinAPIGuessGame\WinAPIGuessGame.c(327,21): warning C4013: uint_pow: нет определения; предполагается "extern" с возвратом типа "int"
-C:\Users\grigh\source\repos\WinAPIGuessGame\WinAPIGuessGame\WinAPIGuessGame.c(406,1): warning C4142: "uint_pow": неопасное переопределение типа
-  WinAPIGuessGame.vcxproj -> C:\Users\grigh\source\repos\WinAPIGuessGame\x64\Debug\WinAPIGuessGame.exe
