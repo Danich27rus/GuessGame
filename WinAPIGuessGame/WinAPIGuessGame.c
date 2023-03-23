@@ -4,6 +4,8 @@
 #include "framework.h"
 #include "WinAPIGuessGame.h"
 
+#define WIN_COEFF 1.25
+
 #define MAX_LOADSTRING 100
 
 // Глобальные переменные:
@@ -22,15 +24,19 @@ INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 typedef struct GameStatus {
     bool GameStarted;
     wint_t CashValue;
+    wint_t GamesPlayed;
     wint_t AttemptCounter;
     errno_t numberToGuess;
 } GameStatus;
 
 static wchar_t TextBoxBuff[1000];
 
-GameStatus* game = NULL;
+static GameStatus* game = NULL;
 
-HWND hwndGame, hwndAttempt, hwndCashValue, hwndHintCheckBox, hwndCombo, hwndOutput, hwndInput;
+HWND hwndGame, hwndAttempt, hwndCashValue, hwndHintCheckBox, hwndCombo, 
+hwndOutput, hwndInput, 
+hwndBet, hwndBetInput, 
+hwndLeftBorder, hwndRightBorder;
 //HBRUSH hBrushLabel = NULL;
 //COLORREF clrLabelBkGnd;
 
@@ -102,6 +108,7 @@ ATOM WindowGuessClass(HINSTANCE hInstance)
     game = (struct GameStatus*)malloc(sizeof(struct GameStatus));
     game->AttemptCounter = 0;
     game->GameStarted = 0;
+    game->GamesPlayed = 0;
 
     return RegisterClassExW(&wcex);
 }
@@ -149,13 +156,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     // = L"\n\
     // ";
-    wchar_t buf[10], buff_num[10], attempts_value[_MAX_ITOSTR_BASE8_COUNT];
-    wint_t buff_num_int;
+    wchar_t buf[10], 
+        buff_num[10], 
+        attempts_value[_MAX_ITOSTR_BASE10_COUNT],
+        games_value[_MAX_ITOSTR_BASE10_COUNT],
+        correct_number[_MAX_ITOSTR_BASE10_COUNT];
+    errno_t buff_num_int, bet_buff_int = 0, leftBorder = -100, rightBorder = 100;
     bool hint_flag;
     const wchar_t* AttemptItems[] = { L"4", L"5", L"6", L"7", L"8" };
     wchar_t* StringGamesCounter = L"Количество игр:\r\n";
-    wchar_t* StringAttemptCounter = L"Количество попыток\r\n";
-    wchar_t* StringCashValue = L"Количество монет на счету\r\n";
+    wchar_t* StringAttemptCounter = L"Количество попыток:\r\n";
+    wchar_t* StringCashValue = L"Количество монет на счету:\r\n";
+    wchar_t* StringBetEmpty = L"Поле 'Ставка' не может быть пустым\r\n";
+    wchar_t* StringCashBet = L"Ставка:\r\n";
+    wchar_t* StringRange = L"Диапазон значений:\r\n\r\nОт:\r\n\r\nДо:";
 
     wchar_t* GameStart = L"Игра началась\r\n";
     wchar_t* IncorrectAnswer = L"Неправильный ответ\r\n";
@@ -163,6 +177,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     wchar_t* INCAnswerLow = L"Ответ меньше введённого числа\r\n";
     wchar_t* INCAnswerHigh = L"Ответ больше введённого числа\r\n";
     wchar_t* ZeroAttempts = L"У вас закончились попытки\r\nХотите попробовать снова?\r\n";
+    wchar_t* CNumber = L" - правильный ответ\r\n";
 
     switch (message)
     {
@@ -180,6 +195,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             ES_AUTOHSCROLL | ES_AUTOVSCROLL,
             20, 80, 350, 220, hWnd, (HMENU)IDC_OUTPUTTEXTBOX, NULL, NULL);
 
+        hwndBetInput = CreateWindowEx(WS_EX_WINDOWEDGE,
+            TEXT("Edit"), NULL,
+            WS_CHILD | WS_VISIBLE | WS_BORDER,
+            470, 130, 115, 20, hWnd, (HMENU)IDC_INPUTBOXBET, NULL, NULL);
+
         //GroupBox окна игры
         CreateWindowW(L"Button", L"Окно игры",
             WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
@@ -191,9 +211,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             400, 20, 200, 360, hWnd, (HMENU)IDC_GROUPBOX, NULL, NULL);
 
         //ComboBox с кол-вом попыток
-        hwndCombo = CreateWindowW(L"Combobox", NULL,
+        /*hwndCombo = CreateWindowW(L"Combobox", NULL,
             WS_CHILD | WS_VISIBLE | CBS_DROPDOWN,
-            450, 95, 70, 125, hWnd, (HMENU)IDC_COMBOBOX, NULL, NULL);
+            450, 95, 70, 125, hWnd, (HMENU)IDC_COMBOBOX, NULL, NULL);*/
 
         CreateWindowW(L"Static", StringGamesCounter,
             WS_VISIBLE | WS_CHILD | SS_LEFT,
@@ -201,11 +221,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         CreateWindowW(L"Static", StringAttemptCounter,
             WS_VISIBLE | WS_CHILD | SS_LEFT,
-            430, 70, 150, 25, hWnd, (HMENU)IDC_STATIC, NULL, NULL);
+            415, 70, 150, 25, hWnd, (HMENU)IDC_STATIC, NULL, NULL);
 
         CreateWindowW(L"Static", StringCashValue,
-            WS_VISIBLE | WS_CHILD | SS_CENTER,
-            430, 150, 150, 35, hWnd, (HMENU)IDC_STATIC, NULL, NULL);
+            WS_VISIBLE | WS_CHILD | SS_LEFT,
+            415, 90, 150, 35, hWnd, (HMENU)IDC_STATIC, NULL, NULL);
+
+        CreateWindowW(L"Static", StringCashBet,
+            WS_VISIBLE | WS_CHILD | SS_LEFT,
+            415, 130, 50, 35, hWnd, (HMENU)IDC_STATIC, NULL, NULL);
+
+        CreateWindowW(L"Static", StringRange,
+            WS_VISIBLE | WS_CHILD | SS_LEFT,
+            415, 180, 150, 85, hWnd, (HMENU)IDC_STATIC, NULL, NULL);
 
         hwndGame = CreateWindowW(L"Static", L"0",
             WS_VISIBLE | WS_CHILD,
@@ -213,11 +241,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         hwndAttempt = CreateWindowW(L"Static", L"",
             WS_VISIBLE | WS_CHILD,
-            530, 100, 20, 25, hWnd, (HMENU)IDC_STATIC, NULL, NULL);  //Количество попыток
+            565, 70, 20, 25, hWnd, (HMENU)IDC_STATIC, NULL, NULL);  //Количество попыток
 
         hwndCashValue = CreateWindowW(L"Static", L"100",
             WS_VISIBLE | WS_CHILD,
-            490, 185, 30, 20, hWnd, (HMENU)IDC_STATIC, NULL, NULL);  //Количество денег
+            470, 107, 30, 20, hWnd, (HMENU)IDC_STATIC, NULL, NULL);  //Количество денег
 
         hwndHintCheckBox = CreateWindowW(L"Button", L"Подсказки выключены",
             WS_VISIBLE | WS_CHILD | BS_CHECKBOX,
@@ -233,11 +261,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         CreateWindowW(L"Button", L"Повторить игру",
             WS_VISIBLE | WS_CHILD,
-            420, 340, 150, 25, hWnd, (HMENU)IDC_RESTART, NULL, NULL);
+            430, 340, 150, 25, hWnd, (HMENU)IDC_RESTART, NULL, NULL);
+
+        CreateWindowW(L"Button", L"Сделать ставку",
+            WS_VISIBLE | WS_CHILD,
+            470, 150, 115, 25, hWnd, (HMENU)IDC_INPUTBET, NULL, NULL);
+
+        //Поля ввода, убраны вниз чтобы белый прямоугольник не наплывал на них
+        hwndLeftBorder = CreateWindowEx(WS_EX_WINDOWEDGE,
+            TEXT("Edit"), L"-100",
+            WS_CHILD | WS_VISIBLE | WS_BORDER,
+            470, 210, 115, 20, hWnd, (HMENU)IDC_INPUTBOXFROM, NULL, NULL);
+
+        hwndRightBorder = CreateWindowEx(WS_EX_WINDOWEDGE,
+            TEXT("Edit"), L"100",
+            WS_CHILD | WS_VISIBLE | WS_BORDER,
+            470, 240, 115, 20, hWnd, (HMENU)IDC_INPUTBOXTO, NULL, NULL);
 
         CheckDlgButton(hWnd, IDC_HINT, BST_UNCHECKED);
         EnableWindow(GetDlgItem(hWnd, IDC_RESTART), false);
-        EnableWindow(GetDlgItem(hWnd, IDC_COMBOBOX), false);
+        //EnableWindow(GetDlgItem(hWnd, IDC_COMBOBOX), false);
 
         for (int i = 0; i < 5; i++) {
             SendMessageW(hwndCombo, CB_ADDSTRING, 0, (LPARAM)AttemptItems[i]);
@@ -255,25 +298,42 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 break;
             }
             --game->AttemptCounter;
+            /*CreateWindowW(L"Static", L"0",
+                WS_VISIBLE | WS_CHILD | SS_WHITEFRAME,
+                180, 50, 20, 25, hWnd, (HMENU)IDC_STATIC, NULL, NULL);*/ //Костыль на перерисовке
+            StringCbPrintf(buf, 10, L"%ld", game->AttemptCounter);
+            SetWindowText(hwndAttempt, buf);
+            GetDlgItemText(hWnd, IDC_INPUTTEXTBOX, buff_num, 10);
+            buff_num_int = _wtoi(buff_num);
             if (!game->AttemptCounter) {
                 wcsncat_s(TextBoxBuff, 1000, ZeroAttempts, wcslen(ZeroAttempts));
                 EnableWindow(GetDlgItem(hWnd, IDC_NUMBERCHECK), false);
                 EnableWindow(GetDlgItem(hWnd, IDC_RESTART), true);
+                SetDlgItemText(hWnd, IDC_OUTPUTTEXTBOX, TextBoxBuff);
+                _itow_s(game->numberToGuess, correct_number, _MAX_ITOSTR_BASE10_COUNT, 10);
+                wcsncat_s(TextBoxBuff, 1000, correct_number, wcslen(correct_number));
+                wcsncat_s(TextBoxBuff, 1000, CNumber, wcslen(CNumber));
+                ++game->GamesPlayed;
+                _itow_s(game->GamesPlayed, games_value, _MAX_ITOSTR_BASE10_COUNT, 10);
+                SetWindowText(hwndGame, games_value);
+                SetDlgItemText(hWnd, IDC_OUTPUTTEXTBOX, TextBoxBuff);
                 break;
             }
-            /*CreateWindowW(L"Static", L"0",
-                WS_VISIBLE | WS_CHILD | SS_WHITEFRAME,
-                180, 50, 20, 25, hWnd, (HMENU)IDC_STATIC, NULL, NULL);*/ //Костыль на перерисовке
-            StringCbPrintf(buf, IDC_INPUTTEXTBOX, L"%ld", game->AttemptCounter);
-            SetWindowText(hwndAttempt, buf);
-            GetDlgItemText(hWnd, IDC_INPUTTEXTBOX, buff_num, 10);
-            buff_num_int = _wtoi(buff_num);
             if (buff_num_int == game->numberToGuess) {
                 wcsncat_s(TextBoxBuff, 1000, CorrectAnswer, wcslen(CorrectAnswer));
                 SetDlgItemText(hWnd, IDC_OUTPUTTEXTBOX, TextBoxBuff);
                 //GameStarted = 0;
                 EnableWindow(GetDlgItem(hWnd, IDC_NUMBERCHECK), false);
                 EnableWindow(GetDlgItem(hWnd, IDC_RESTART), true);
+                ++game->GamesPlayed;
+                _itow_s(game->GamesPlayed, games_value, _MAX_ITOSTR_BASE10_COUNT, 10);
+                SetWindowText(hwndGame, games_value);
+                GetWindowText(hwndCashValue, buff_num, 10);
+                bet_buff_int = _wtoi(buff_num);
+                bet_buff_int += (game->CashValue * WIN_COEFF);
+                StringCbPrintf(buff_num, 10, L"%ld", bet_buff_int);
+                SetWindowText(hwndCashValue, buff_num);
+
             }
             if (buff_num_int < game->numberToGuess) {
                 if (!hint_flag) {
@@ -301,9 +361,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             EnableWindow(GetDlgItem(hWnd, IDC_ROLL), true);
             EnableWindow(GetDlgItem(hWnd, IDC_HINT), true);
             EnableWindow(GetDlgItem(hWnd, IDC_COMBOBOX), false);
+            EnableWindow(GetDlgItem(hWnd, IDC_INPUTBET), true);
             SetWindowTextW(hwndAttempt, L"");
+            SetWindowTextW(hwndBetInput, L"");
             TextBoxBuff[0] = '\0';
             game->AttemptCounter = 0;
+            game->CashValue = 0;
         }
         if (LOWORD(wParam) == IDC_HINT) {
             if (!hint_flag) {
@@ -315,19 +378,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 SetWindowTextW(hwndHintCheckBox, L"Подсказки выклчюены");
             }
         }
-        if (LOWORD(wParam) == IDC_ROLL)
-        {
-            /*if (!game->AttemptCounter) {
-                SetWindowText(hwndOutput, L"Выберете количество попыток!");
+        if (LOWORD(wParam) == IDC_ROLL) {
+            GetWindowText(hwndLeftBorder, buff_num, 10);
+            leftBorder = _wtoi(buff_num);
+            GetWindowText(hwndRightBorder, buff_num, 10);
+            rightBorder = _wtoi(buff_num);
+            if (game->CashValue == NULL) {
+                SetWindowText(hwndOutput, StringBetEmpty);
                 break;
-            }*/
+            }
             game->GameStarted = 1;
-            game->numberToGuess = rand() % 200 - 100;
+            game->numberToGuess = rand() % (rightBorder - leftBorder + 1) + leftBorder;
             for (int i = 0; i < 10; ++i) {
                 if (uint_pow(2, i) > abs(game->numberToGuess)) {
-                    _itow_s(i, attempts_value, _MAX_ITOSTR_BASE8_COUNT, 8);
+                    _itow_s(i, attempts_value, _MAX_ITOSTR_BASE10_COUNT, 10);
                     SetWindowText(hwndAttempt, attempts_value);
-                    game->AttemptCounter = attempts_value;
+                    game->AttemptCounter = i;
                     break;
                 }
             }
@@ -339,12 +405,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             wcsncat_s(TextBoxBuff, 1000, GameStart, wcslen(GameStart));
             SetWindowText(hwndOutput, TextBoxBuff);
         }
-        /*if (HIWORD(wParam) == CBN_SELCHANGE) {
-
-            LRESULT sel = SendMessage(hwndCombo, CB_GETCURSEL, 0, 0);
-            SetWindowTextW(hwndAttempt, AttemptItems[sel]);
-            game->AttemptCounter = _wtoi(AttemptItems[sel]);
-        }*/
+        if (LOWORD(wParam) == IDC_INPUTBET) {
+            GetDlgItemText(hWnd, IDC_INPUTBOXBET, buff_num, 10);
+            if (buff_num[0] == L'\0')               //Проверка на то, что поле со ставкой пустое
+            {
+                SetWindowText(hwndOutput, StringBetEmpty);
+                break;
+            }
+            game->CashValue = _wtoi(buff_num);
+            GetWindowText(hwndCashValue, buff_num, 10);
+            bet_buff_int = _wtoi(buff_num);
+            bet_buff_int -= game->CashValue;
+            StringCbPrintf(buff_num, 10, L"%ld", bet_buff_int);
+            SetWindowText(hwndCashValue, buff_num);
+            //GetDlgItemText(hWnd, IDC_INPUTBOXBET, buff_num, 10);
+            EnableWindow(GetDlgItem(hWnd, IDC_INPUTBET), false);
+            buff_num[0] = '\0';
+        }
         int wmId = LOWORD(wParam);
         // Разобрать выбор в меню:
         switch (wmId)

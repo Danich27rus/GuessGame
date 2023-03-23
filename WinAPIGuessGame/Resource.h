@@ -19,8 +19,12 @@
 #define IDC_HINT				1	//чекбокс "Подсказка"
 #define IDC_GROUPBOX			10  //TODO: возможные ошибки т.к. два гроупбокса с одним IDC
 #define IDC_COMBOBOX			15  //TODO: возможные ошибки т.к. два гроупбокса с одним IDC
-#define IDC_INPUTTEXTBOX		20
-#define IDC_OUTPUTTEXTBOX		25
+#define IDC_INPUTTEXTBOX		20  //InputBox для числа
+#define IDC_INPUTBOXFROM		21	//От 
+#define IDC_INPUTBOXTO			22	//До
+#define IDC_INPUTBOXBET			23	//Ставка
+#define IDC_OUTPUTTEXTBOX		25	//OutputBox для числа
+#define IDC_INPUTBET			24
 //#define
 #ifndef IDC_STATIC
 #define IDC_STATIC				-1
